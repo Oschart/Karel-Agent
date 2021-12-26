@@ -1,4 +1,5 @@
 from common import Action
+import copy
 
 class Environment:
     # Direction encoding
@@ -30,29 +31,32 @@ class Environment:
         self.n = 4
 
     def init(self, task):
-        self.task = task
+        self.task = copy.deepcopy(task)
+
+        self.task["pregrid_markers"] = set(map(tuple, self.task["pregrid_markers"]))
+        self.task["postgrid_markers"] = set(map(tuple, self.task["postgrid_markers"]))
 
         # Active (i.e., changing) state, note that this is not the total state
         self.state = {
-            "agent_r": task["pregrid_agent_row"],
-            "agent_c": task["pregrid_agent_col"],
-            "agent_d": task["pregrid_agent_dir"],
-            "markers": task["pregrid_markers"],
+            "agent_r": self.task["pregrid_agent_row"],
+            "agent_c": self.task["pregrid_agent_col"],
+            "agent_d": self.task["pregrid_agent_dir"],
+            "markers": self.task["pregrid_markers"],
         }
 
         # Active target state, note that this is not the total state
         self.target_state = {
-            "agent_r": task["postgrid_agent_row"],
-            "agent_c": task["postgrid_agent_col"],
-            "agent_d": task["postgrid_agent_dir"],
-            "markers": task["postgrid_markers"],
+            "agent_r": self.task["postgrid_agent_row"],
+            "agent_c": self.task["postgrid_agent_col"],
+            "agent_d": self.task["postgrid_agent_dir"],
+            "markers": self.task["postgrid_markers"],
         }
     
     def get_task_state(self):
         if self.state == 'terminal':
             return 'terminal'
 
-        task_state = self.task.copy()
+        task_state = copy.deepcopy(self.task)
         task_state["pregrid_agent_row"] = self.state["agent_r"]
         task_state["pregrid_agent_col"] = self.state["agent_c"]
         task_state["pregrid_agent_dir"] = self.state["agent_d"]
@@ -120,19 +124,19 @@ class Environment:
 
     def pickMarker(self):
         agent_r, agent_c = self.state["agent_r"], self.state["agent_c"]
-        if [agent_r, agent_c] not in self.state["markers"]:
+        if (agent_r, agent_c) not in self.state["markers"]:
             self.state = "terminal"
             return
 
-        self.state["markers"].remove([agent_r, agent_c])
+        self.state["markers"].remove((agent_r, agent_c))
 
     def putMarker(self):
         agent_r, agent_c = self.state["agent_r"], self.state["agent_c"]
-        if [agent_r, agent_c] in self.state["markers"]:
+        if (agent_r, agent_c) in self.state["markers"]:
             self.state = "terminal"
             return
 
-        self.state["markers"].append([agent_r, agent_c])
+        self.state["markers"].add((agent_r, agent_c))
 
 
     def finish(self):
