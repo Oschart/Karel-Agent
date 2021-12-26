@@ -16,9 +16,10 @@ import pandas as pd
 import pickle
 
 class PolicyGradientAgent():
-    def __init__(self, pretrained=False):
+    def __init__(self, level='', pretrained=False):
+        self.level = level
         if pretrained:
-            self.actor_critic = pickle.load(open('pretrained/actor_critic.pkl', "rb"))
+            self.actor_critic = pickle.load(open(f'pretrained/actor_critic_{self.level}.pkl', "rb"))
 
     def train(self, tasks, seqs, env=None, hidden_size=256, learning_rate=3e-4, GAMMA =0.99, num_steps=100, max_episodes=100000):
         num_inputs = 11*16
@@ -52,7 +53,7 @@ class PolicyGradientAgent():
 
                 action = np.random.choice(num_outputs, p=np.squeeze(dist))
                 optimal_action = Action.from_str[optimal_seq[t]]
-                log_prob = torch.log(policy_dist.squeeze(0)[optimal_action])
+                log_prob = torch.log(policy_dist.squeeze(0)[optimal_action] + 1e-10)
                 entropy = -np.sum(np.mean(dist) * np.log(dist))
                 new_state, reward = env.step(optimal_action)
                 done = new_state == 'terminal'
@@ -64,6 +65,8 @@ class PolicyGradientAgent():
                 state = new_state
                 
                 if done or t == num_steps-1:
+                    if reward < 1:
+                        print('OH')
                     #Qval, _ = actor_critic.forward(featurize_task(new_state))
                     #Qval = Qval.detach().numpy()[0,0]
                     Qval = 0.0
@@ -96,24 +99,8 @@ class PolicyGradientAgent():
 
             
         
-        # Plot results
-        smoothed_rewards = pd.Series.rolling(pd.Series(all_rewards), 10).mean()
-        smoothed_rewards = [elem for elem in smoothed_rewards]
-        plt.plot(all_rewards)
-        plt.plot(smoothed_rewards)
-        plt.plot()
-        plt.xlabel('Episode')
-        plt.ylabel('Reward')
-        plt.show()
-
-        plt.plot(all_lengths)
-        plt.plot(average_lengths)
-        plt.xlabel('Episode')
-        plt.ylabel('Episode length')
-        plt.show()
-
         self.actor_critic = actor_critic
-        pickle.dump(actor_critic, open('pretrained/actor_critic.pkl', "wb"))
+        pickle.dump(actor_critic, open(f'pretrained/actor_critic_{self.level}.pkl', "wb"))
         return actor_critic
     
     def solve(self, tasks, opt_seqs, H=100):
@@ -143,6 +130,6 @@ class PolicyGradientAgent():
         accr = solved/len(tasks)
         avg_extra_steps = extra_steps/len(tasks)
 
-        print(f'Attempted {len(tasks)} tasks, correctly solved {solved}. Accuracy={accr*100}%, avg extra steps={avg_extra_steps}')
+        print(f'Attempted {len(tasks)} tasks, correctly solved {solved}. Accuracy={accr*100:.2f}%, avg extra steps={avg_extra_steps:.2f}')
 
 
