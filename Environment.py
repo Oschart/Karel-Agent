@@ -1,15 +1,20 @@
 from common import Action
 import copy
+import gym
+from gym import spaces
+import numpy as np
 
-class Environment:
+
+class KarelEnv(gym.Env):
+    N_ACTIONS = 6
     # Direction encoding
     # dir_to_dxy = {"^": (-1, 0), ">": (0, 1), "v": (1, 0), "<": (0, -1)}
     dir_to_dxy = {"north": (-1, 0), "east": (0, 1), "south": (1, 0), "west": (0, -1)}
     # dir_ord = ["^", ">", "v", "<"]
     dir_ord = ["north", "east", "south", "west"]
 
-
     def __init__(self):
+        super(KarelEnv, self).__init__()
         self.actions = [
             "move",
             "turnLeft",
@@ -18,8 +23,16 @@ class Environment:
             "putMarker",
             "finish",
         ]
+        '''
+        self.obs_shape = ()
 
-        self.cmd_handlers = {
+        self.action_space = spaces.Discrete(self.N_ACTIONS)
+        self.observation_space = spaces.Box(
+            low=0, high=1, shape=(1,), dtype=np.float32
+        )
+        '''
+
+        self.action_handlers = {
             Action.move: self.move,
             Action.turnLeft: lambda: self.turn(-1),
             Action.turnRight: lambda: self.turn(1),
@@ -51,10 +64,10 @@ class Environment:
             "agent_d": self.task["postgrid_agent_dir"],
             "markers": self.task["postgrid_markers"],
         }
-    
+
     def get_task_state(self):
-        if self.state == 'terminal':
-            return 'terminal'
+        if self.state == "terminal":
+            return "terminal"
 
         task_state = copy.deepcopy(self.task)
         task_state["pregrid_agent_row"] = self.state["agent_r"]
@@ -74,15 +87,15 @@ class Environment:
             r = self.R(self.state, a)
             EP.append((s, a, r))
             self.step(a)
-        
+
         return EP
 
     def step(self, action):
-        if self.state == 'terminal':
-            return 'terminal', 0
+        if self.state == "terminal":
+            return "terminal", 0
 
         r = self.R(self.state, action)
-        self.cmd_handlers[action]()
+        self.action_handlers[action]()
         return self.get_task_state(), r
 
     def R(self, s, a):
@@ -138,6 +151,6 @@ class Environment:
 
         self.state["markers"].add((agent_r, agent_c))
 
-
     def finish(self):
-        self.state = 'terminal'
+        self.state = "terminal"
+

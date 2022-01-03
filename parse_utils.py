@@ -1,6 +1,8 @@
+#%%
 import os
 import json
 import numpy as np
+from common import Action, Direction
 
 def parse_dataset(data_dir='datasets/data_easy', mode='train', return_vect=False):
     tasks_dir = f'{data_dir}/{mode}/task'
@@ -12,8 +14,8 @@ def parse_dataset(data_dir='datasets/data_easy', mode='train', return_vect=False
     seqs = [json.load(open(f'{seqs_dir}/{fname}')) for fname in seq_fnames]
 
     if return_vect:
-        X = [featurize_task(task) for task in tasks]
-        y = [featurize_seq(seq) for seq in seqs]
+        X = [vectorize_obs(task) for task in tasks]
+        y = [vectorize_seq(seq) for seq in seqs]
         tasks = {"raw": tasks, "vect": X}
         seqs = {"raw": seqs, "vect": y}
     
@@ -21,25 +23,19 @@ def parse_dataset(data_dir='datasets/data_easy', mode='train', return_vect=False
 
 
 
-def featurize_task(task):
+def vectorize_obs(task):
     n, m = task['gridsz_num_rows'], task['gridsz_num_cols']
-    dir2idx = {
-        'north': 0,
-        'east': 1,
-        'south': 2,
-        'west': 3
-    }
     feat_v = np.zeros((n,m,1 + 2*5))
+
     ar1 = task['pregrid_agent_row']
     ac1 = task['pregrid_agent_col']        
-    ad1 = dir2idx[task['pregrid_agent_dir']]
+    ad1 = Direction.from_str[task['pregrid_agent_dir']]
 
-    feat_v[ar1, ac1, ad1 + 2] = 1     
-    
     ar2 = task['postgrid_agent_row']
     ac2 = task['postgrid_agent_col']   
-    ad2 = dir2idx[task['postgrid_agent_dir']]
+    ad2 = Direction.from_str[task['postgrid_agent_dir']]
 
+    feat_v[ar1, ac1, ad1 + 2] = 1     
     feat_v[ar2, ac2, ad2 + 7] = 1
 
     # Represent walls
@@ -56,10 +52,44 @@ def featurize_task(task):
     return feat_v
 
 
-def featurize_seq(seq):
-    cmds = ['move', 'turnLeft', 'turnRight', 'pickMarker', 'putMarker', 'finish']
-    cmd2idx = {cmd: i for i, cmd in enumerate(cmds)}
-    feat_v = [cmd2idx[cmd] for cmd in seq['sequence']]
-    
+def vectorize_seq(seq):
+    feat_v = [Action.from_str[cmd] for cmd in seq['sequence']]
     return feat_v
 
+
+
+'''
+X_easy, _ = parse_dataset(data_dir='datasets/data_easy')
+X_medium, _ = parse_dataset(data_dir='datasets/data_medium')
+X, _ = parse_dataset(data_dir='datasets/data')
+
+
+#%%
+
+for taskm in X_medium:
+    subs = False
+    for taskh in X:
+        if taskm == taskh:
+            print('OVERLAP')
+            break
+
+
+
+#%%
+X_set = set(map(str,X))
+X_easy_set = set(map(str,X_easy))
+X_medium_set = set(map(str,X_medium))
+
+#%%
+med_inter_hard = X_medium_set.intersection(X_set)
+easy_inter_hard = X_easy_set.intersection(X_set)
+print(len(easy_inter_hard)/len(X_easy_set))
+print(len(med_inter_hard)/len(X_medium_set))
+# %%
+for sth in X_easy_set:
+    print(type(sth))
+    break
+# %%
+print(len(easy_inter_hard))
+# %%
+'''

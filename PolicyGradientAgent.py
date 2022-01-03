@@ -1,7 +1,7 @@
 from ActorCritic import ActorCritic
-from parse_utils import featurize_task
+from parse_utils import vectorize_obs
 from common import Action
-from Environment import Environment
+from Environment import KarelEnv
 
 import sys
 import torch  
@@ -25,7 +25,7 @@ class PolicyGradientAgent():
         num_inputs = 11*16
         num_outputs = 6
 
-        env = Environment()
+        env = KarelEnv()
         
         actor_critic = ActorCritic(num_inputs, num_outputs, hidden_size)
         ac_optimizer = optim.Adam(actor_critic.parameters(), lr=learning_rate)
@@ -46,7 +46,7 @@ class PolicyGradientAgent():
             env.init(state)
             
             for t in range(len(optimal_seq)):
-                state_vect = featurize_task(state)
+                state_vect = vectorize_obs(state)
                 value, policy_dist = actor_critic.forward(state_vect)
                 value = value.detach().numpy()[0,0]
                 dist = policy_dist.detach().numpy() 
@@ -106,7 +106,7 @@ class PolicyGradientAgent():
     def solve(self, tasks, opt_seqs, H=100):
         solved = 0
         extra_steps = 0
-        env = Environment()
+        env = KarelEnv()
         for i in range(len(tasks)):
             task = tasks[i]
             opt_seq = opt_seqs[i]['sequence']
@@ -114,7 +114,7 @@ class PolicyGradientAgent():
             state = task
             env.init(state)
             for t in range(H):
-                state_vect = featurize_task(state)
+                state_vect = vectorize_obs(state)
                 value, policy_dist = self.actor_critic.forward(state_vect)
                 value = value.detach().numpy()[0,0]
                 dist = policy_dist.detach().numpy() 
