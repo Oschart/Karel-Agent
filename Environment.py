@@ -3,34 +3,27 @@ import copy
 import gym
 from gym import spaces
 import numpy as np
+from random import choice
+
+from parse_utils import vectorize_obs
 
 
 class KarelEnv(gym.Env):
     N_ACTIONS = 6
     # Direction encoding
-    # dir_to_dxy = {"^": (-1, 0), ">": (0, 1), "v": (1, 0), "<": (0, -1)}
     dir_to_dxy = {"north": (-1, 0), "east": (0, 1), "south": (1, 0), "west": (0, -1)}
-    # dir_ord = ["^", ">", "v", "<"]
     dir_ord = ["north", "east", "south", "west"]
 
-    def __init__(self):
+    def __init__(self, task_space):
         super(KarelEnv, self).__init__()
-        self.actions = [
-            "move",
-            "turnLeft",
-            "turnRight",
-            "pickMarker",
-            "putMarker",
-            "finish",
-        ]
-        '''
-        self.obs_shape = ()
 
+        self.task_space = task_space
+
+        self.obs_shape = (4, 4, 11)
         self.action_space = spaces.Discrete(self.N_ACTIONS)
         self.observation_space = spaces.Box(
-            low=0, high=1, shape=(1,), dtype=np.float32
+            low=0, high=1, shape=self.obs_shape, dtype=np.uint8
         )
-        '''
 
         self.action_handlers = {
             Action.move: self.move,
@@ -40,11 +33,16 @@ class KarelEnv(gym.Env):
             Action.putMarker: self.putMarker,
             Action.finish: self.finish,
         }
+        self.reset()
 
-        self.n = 4
+    def reset(self):
+        init_state = choice(self.task_space)
+        self.init(init_state)
+        return vectorize_obs(init_state)
 
     def init(self, task):
         self.task = copy.deepcopy(task)
+        self.is_terminal = False
 
         self.task["pregrid_markers"] = set(map(tuple, self.task["pregrid_markers"]))
         self.task["postgrid_markers"] = set(map(tuple, self.task["postgrid_markers"]))
@@ -65,7 +63,7 @@ class KarelEnv(gym.Env):
             "markers": self.task["postgrid_markers"],
         }
 
-    def get_task_state(self):
+    def get_full_state(self):
         if self.state == "terminal":
             return "terminal"
 
@@ -79,7 +77,7 @@ class KarelEnv(gym.Env):
     def generate_rollout(self, PI, H):
         EP = []
         for i in range(H):
-            s = self.get_task_state()
+            s = self.get_full_state()
             if s == "terminal":
                 break
 
@@ -91,12 +89,12 @@ class KarelEnv(gym.Env):
         return EP
 
     def step(self, action):
-        if self.state == "terminal":
-            return "terminal", 0
-
         r = self.R(self.state, action)
         self.action_handlers[action]()
-        return self.get_task_state(), r
+
+        next_obs = vectorize_obs(self.get_full_state())
+
+        return next_obs, r, self.is_terminal, {}
 
     def R(self, s, a):
         if s == self.target_state and a == Action.finish:
@@ -120,7 +118,8 @@ class KarelEnv(gym.Env):
         wall_hit = next_pos in self.task["walls"]
 
         if out_of_bounds or wall_hit:
-            self.state = "terminal"
+            # self.state = "terminal"
+            self.is_terminal = True
             return
 
         self.state["agent_r"], self.state["agent_c"] = next_pos[0], next_pos[1]
@@ -138,7 +137,8 @@ class KarelEnv(gym.Env):
     def pickMarker(self):
         agent_r, agent_c = self.state["agent_r"], self.state["agent_c"]
         if (agent_r, agent_c) not in self.state["markers"]:
-            self.state = "terminal"
+            # self.state = "terminal"
+            self.is_terminal = True
             return
 
         self.state["markers"].remove((agent_r, agent_c))
@@ -146,11 +146,11 @@ class KarelEnv(gym.Env):
     def putMarker(self):
         agent_r, agent_c = self.state["agent_r"], self.state["agent_c"]
         if (agent_r, agent_c) in self.state["markers"]:
-            self.state = "terminal"
+            self.is_terminal = True
             return
 
         self.state["markers"].add((agent_r, agent_c))
 
     def finish(self):
-        self.state = "terminal"
+        self.is_terminal = True
 
