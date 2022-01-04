@@ -35,8 +35,10 @@ class KarelEnv(gym.Env):
         }
         self.reset()
 
-    def reset(self):
-        init_state = choice(self.task_space)
+    def reset(self, init_state=None):
+        if init_state is None:
+            init_state = choice(self.task_space)
+            
         self.init(init_state)
         return vectorize_obs(init_state)
 
@@ -118,7 +120,6 @@ class KarelEnv(gym.Env):
         wall_hit = next_pos in self.task["walls"]
 
         if out_of_bounds or wall_hit:
-            # self.state = "terminal"
             self.is_terminal = True
             return
 
@@ -137,7 +138,6 @@ class KarelEnv(gym.Env):
     def pickMarker(self):
         agent_r, agent_c = self.state["agent_r"], self.state["agent_c"]
         if (agent_r, agent_c) not in self.state["markers"]:
-            # self.state = "terminal"
             self.is_terminal = True
             return
 
