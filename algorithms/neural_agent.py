@@ -15,7 +15,7 @@ import pandas as pd
 import pickle
 
 
-class PolicyGradientAgent:
+class NeuralAgent:
     def __init__(
         self,
         policy,
@@ -25,6 +25,7 @@ class PolicyGradientAgent:
         max_eps_len=100,
         max_episodes=100000,
         num_actions=6,
+        learn_by_demo=True,
     ):
         self.policy = policy
         self.env = env
@@ -33,6 +34,7 @@ class PolicyGradientAgent:
         self.max_eps_len = max_eps_len
         self.max_episodes = max_episodes
         self.num_actions = num_actions
+        self.learn_by_demo = learn_by_demo
 
     def train(self, tasks, expert_outputs=None):
 
@@ -50,16 +52,17 @@ class PolicyGradientAgent:
             task_state = self.env.reset(task_state)
 
             self.policy.train()
-            t = self.process_episode(task_state, optimal_seq)
-            self.update_policy()
+            t = self.generate_ep_rollout(task_state, optimal_seq)
 
-            all_rewards.append(np.sum(self.rewards))
+            self.update_agent()
+
+            all_rewards.append(np.sum(self.epidata["R"]))
             all_lengths.append(t)
             average_lengths.append(np.mean(all_lengths[-10:]))
             if episode % 100 == 0:
                 print(
                     "episode: {}, reward: {}, total length: {}, average length: {} \n".format(
-                        episode, np.sum(self.rewards), t, average_lengths[-1]
+                        episode, np.sum(self.epidata["R"]), t, average_lengths[-1]
                     )
                 )
 
@@ -74,8 +77,8 @@ class PolicyGradientAgent:
 
             state = self.env.reset(task_state)
             for t in range(H):
-                _, policy_dist = self.policy(state)
-                dist = policy_dist.detach().numpy()
+                action_dist = self.policy(state)
+                dist = action_dist.detach().numpy()
                 action = dist.argmax()
 
                 state, reward, done, _ = self.env.step(action)
@@ -92,8 +95,39 @@ class PolicyGradientAgent:
             f"Attempted {len(tasks)} tasks, correctly solved {solved}. Accuracy={accr*100:.2f}%, avg extra steps={avg_extra_steps:.2f}"
         )
 
-    def process_episode(self, state, optimal_seq):
-        raise NotImplementedError()
+    def reset_rollout_buffer(self):
+        self.epidata = {"S": [], "S_next": [], "A": [], "R": [], "PI": [], "D": []}
 
-    def update_policy(self):
+    def update_rollout_buffer(self, state, next_state, action, reward, act_prob, done):
+        self.epidata["S"].append(state)
+        self.epidata["S_next"].append(next_state)
+        self.epidata["A"].append(action)
+        self.epidata["R"].append(reward)
+        self.epidata["PI"].append(act_prob)
+        self.epidata["D"].append(done)
+
+    def generate_ep_rollout(self, state, optimal_seq):
+        self.reset_rollout_buffer()
+        for t in range(self.max_eps_len):
+            action_dist = self.policy(state)
+            dist = action_dist.detach().numpy()
+
+            if self.learn_by_demo:
+                # Use expert optimal action
+                action = Action.from_str[optimal_seq[t]]
+            else:
+                # Use own agent's action
+                action = np.random.choice(self.num_actions, p=np.squeeze(dist))
+
+            act_prob = action_dist.squeeze(0)[action]
+            new_state, reward, done, _ = self.env.step(action)
+
+            self.update_rollout_buffer(state, new_state, action, reward, act_prob, done)
+            state = new_state
+
+            if done:
+                break
+        return t
+
+    def update_agent(self):
         raise NotImplementedError()
