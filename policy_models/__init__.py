@@ -1,1 +1,1 @@
-from .mlp import MlpPolicy
+from .mlp import ActorCriticMLP
