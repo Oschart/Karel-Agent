@@ -77,7 +77,7 @@ class NeuralAgent:
 
             state = self.env.reset(task_state)
             for t in range(H):
-                action_dist = self.policy(state)
+                action_dist, _ = self.policy(state)
                 dist = action_dist.detach().numpy()
                 action = dist.argmax()
 
@@ -96,20 +96,25 @@ class NeuralAgent:
         )
 
     def reset_rollout_buffer(self):
-        self.epidata = {"S": [], "S_next": [], "A": [], "R": [], "PI": [], "D": []}
+        self.epidata = {"S": [], "V": [], "A": [], "R": [], "G": [], "PI": [], "D": []}
 
-    def update_rollout_buffer(self, state, next_state, action, reward, act_prob, done):
+    def update_rollout_buffer(self, state, state_value, action, reward, act_prob, done):
         self.epidata["S"].append(state)
-        self.epidata["S_next"].append(next_state)
+        self.epidata["V"].append(state_value)
         self.epidata["A"].append(action)
         self.epidata["R"].append(reward)
         self.epidata["PI"].append(act_prob)
         self.epidata["D"].append(done)
 
+    def wrap_up_episode(self):
+        self.epidata["G"] = self.compute_returns(self.epidata["R"], self.epidata["S"])
+        self.epidata["V"] = torch.FloatTensor(self.epidata["V"])
+
+
     def generate_ep_rollout(self, state, optimal_seq):
         self.reset_rollout_buffer()
         for t in range(self.max_eps_len):
-            action_dist = self.policy(state)
+            action_dist, state_value = self.policy(state)
             dist = action_dist.detach().numpy()
 
             if self.learn_by_demo:
@@ -122,12 +127,21 @@ class NeuralAgent:
             act_prob = action_dist.squeeze(0)[action]
             new_state, reward, done, _ = self.env.step(action)
 
-            self.update_rollout_buffer(state, new_state, action, reward, act_prob, done)
+            self.update_rollout_buffer(state, state_value, action, reward, act_prob, done)
             state = new_state
 
             if done:
                 break
+        self.wrap_up_episode()
         return t
+
+    def compute_returns(self, rewards, states):
+        G = 0.0
+        Gs = np.zeros_like(rewards, dtype=float)
+        for t in reversed(range(len(rewards))):
+            G = rewards[t] + self.GAMMA * G
+            Gs[t] = G
+        return torch.FloatTensor(Gs)
 
     def update_agent(self):
         raise NotImplementedError()

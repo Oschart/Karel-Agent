@@ -12,7 +12,7 @@ env = KarelEnv(task_space=X)
 X_test, y_test = parse_dataset(data_dir='datasets/data_medium', mode='val')
 
 num_inputs = 11*16
-policy = ActorCriticMLP(num_inputs, 6, n_critics=1, hidden_sizes=(256,256))
+policy = ActorCriticMLP(num_inputs, 6, soft_critic=False, hidden_sizes=(256,256))
 agent = ActorCritic(policy, env, max_episodes=24000)
 agent.train(X, y)
 
