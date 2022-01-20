@@ -27,7 +27,8 @@ class NeuralAgent:
         num_actions=6,
         learn_by_demo=True,
         early_stop=None,
-        variant_name='v0'
+        variant_name='v0',
+        load_pretrained=False
     ):
         self.policy = policy
         self.env = env
@@ -39,6 +40,9 @@ class NeuralAgent:
         self.learn_by_demo = learn_by_demo
         self.early_stop = early_stop
         self.variant_name = variant_name
+        
+        if load_pretrained:
+            self.load_policy()
         
 
     def train(self, tasks, expert_traj=None, data_val=None):

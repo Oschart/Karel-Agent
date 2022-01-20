@@ -28,7 +28,8 @@ class ActorCritic(NeuralAgent):
         learning_rate=0.0003,
         max_eps_len=100,
         max_episodes=100000,
-        variant_name='v0'
+        variant_name='v0',
+        load_pretrained=False
     ):
         super().__init__(
             policy,
@@ -37,7 +38,8 @@ class ActorCritic(NeuralAgent):
             learning_rate=learning_rate,
             max_eps_len=max_eps_len,
             max_episodes=max_episodes,
-            variant_name=variant_name
+            variant_name=variant_name,
+            load_pretrained=load_pretrained
         )
 
     def compute_actor_loss(self, data):
