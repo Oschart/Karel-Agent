@@ -1,6 +1,6 @@
 from parse_utils import vectorize_obs
 from common import Action
-from Environment import KarelEnv
+from environment import KarelEnv
 
 import sys
 import torch
@@ -22,33 +22,39 @@ class NeuralAgent:
         env,
         GAMMA=0.99,
         learning_rate=3e-4,
-        max_eps_len=100,
         max_episodes=100000,
+        max_eps_len=100,
         num_actions=6,
         learn_by_demo=True,
+        early_stop=None,
+        variant_name='v0'
     ):
         self.policy = policy
         self.env = env
         self.GAMMA = GAMMA
         self.learning_rate = learning_rate
-        self.max_eps_len = max_eps_len
         self.max_episodes = max_episodes
+        self.max_eps_len = max_eps_len
         self.num_actions = num_actions
         self.learn_by_demo = learn_by_demo
+        self.early_stop = early_stop
+        self.variant_name = variant_name
+        
 
-    def train(self, tasks, expert_outputs=None):
-
+    def train(self, tasks, expert_traj=None, data_val=None):
         self.optimizer = optim.Adam(self.policy.parameters(), lr=self.learning_rate)
 
         all_lengths = []
         average_lengths = []
         all_rewards = []
         self.entropy_term = 0
+        best_accr = 0.0
+        worse_count = 0
 
         for episode in range(self.max_episodes):
 
             task_state = tasks[episode % len(tasks)]
-            optimal_seq = expert_outputs[episode % len(expert_outputs)]["sequence"]
+            optimal_seq = expert_traj[episode % len(expert_traj)]["sequence"]
             task_state = self.env.reset(task_state)
 
             self.policy.train()
@@ -59,18 +65,35 @@ class NeuralAgent:
             all_rewards.append(np.sum(self.epidata["R"]))
             all_lengths.append(t)
             average_lengths.append(np.mean(all_lengths[-10:]))
-            if episode % 100 == 0:
-                print(
-                    "episode: {}, reward: {}, total length: {}, average length: {} \n".format(
-                        episode, np.sum(self.epidata["R"]), t, average_lengths[-1]
-                    )
-                )
+            if episode % 500 == 0:
+                accr, avg_extra_steps = self.evaluate(data_val[0], data_val[1])
+                if accr > best_accr:
+                    best_accr = accr
+                    self.save_policy()
+                else:
+                    worse_count += 1
+                
+                print(f"Episode {episode}: validation accuracy={accr*100:.2f}%, \t avg_extra_steps={avg_extra_steps}")
+                if self.early_stop and worse_count >= self.early_stop:
+                    print(f"Early stopping triggered; validation accuracy hasn't increased for {worse_count} epsiodes!")
+                    break
 
+        self.load_policy()
         return self.policy
 
-    def solve(self, tasks, opt_seqs, H=100):
+    def save_policy(self):
+        save_path = f"pretrained/{self.name}_{self.variant_name}.pth"
+        torch.save(self.policy.state_dict(), save_path)
+
+    def load_policy(self):
+        load_path = f"pretrained/{self.name}_{self.variant_name}.pth"
+        self.policy.load_state_dict(torch.load(load_path))
+
+
+    def evaluate(self, tasks, opt_seqs, H=100):
         solved = 0
         extra_steps = 0
+        self.policy.eval()
         for i in range(len(tasks)):
             task_state = tasks[i]
             opt_seq = opt_seqs[i]["sequence"]
@@ -91,9 +114,8 @@ class NeuralAgent:
         accr = solved / len(tasks)
         avg_extra_steps = extra_steps / len(tasks)
 
-        print(
-            f"Attempted {len(tasks)} tasks, correctly solved {solved}. Accuracy={accr*100:.2f}%, avg extra steps={avg_extra_steps:.2f}"
-        )
+        #print(f"Attempted {len(tasks)} tasks, correctly solved {solved}. Accuracy={accr*100:.2f}%, avg extra steps={avg_extra_steps:.2f}")
+        return accr, avg_extra_steps
 
     def reset_rollout_buffer(self):
         self.epidata = {"S": [], "V": [], "A": [], "R": [], "G": [], "PI": [], "D": []}

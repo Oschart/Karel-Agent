@@ -3,7 +3,7 @@ from typing import Union
 from policy_models.mlp import ActorCriticMLP
 from .neural_agent import NeuralAgent
 from common import Action
-from Environment import KarelEnv
+from environment import KarelEnv
 
 import sys
 import torch
@@ -19,6 +19,7 @@ import pickle
 
 
 class ActorCritic(NeuralAgent):
+    name = 'actor_critic'
     def __init__(
         self,
         policy: Union[ActorCriticMLP, str],
@@ -27,6 +28,7 @@ class ActorCritic(NeuralAgent):
         learning_rate=0.0003,
         max_eps_len=100,
         max_episodes=100000,
+        variant_name='v0'
     ):
         super().__init__(
             policy,
@@ -35,6 +37,7 @@ class ActorCritic(NeuralAgent):
             learning_rate=learning_rate,
             max_eps_len=max_eps_len,
             max_episodes=max_episodes,
+            variant_name=variant_name
         )
 
     def compute_actor_loss(self, data):
