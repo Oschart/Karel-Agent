@@ -5,24 +5,31 @@ import numpy as np
 from common import Action, Direction
 from sklearn.utils import shuffle
 
+data_level2dir = {"easy": 'data_easy', "medium": 'data_medium', "hard": 'data'}
 
-def parse_dataset(data_dir="datasets/data_easy", mode="train", sort_by_hardness=False):
-    tasks_dir = f"{data_dir}/{mode}/task"
-    seqs_dir = f"{data_dir}/{mode}/seq"
-    task_fnames = sorted(os.listdir(tasks_dir), key=lambda s: int(s.split("_")[0]))
-    seq_fnames = sorted(os.listdir(seqs_dir), key=lambda s: int(s.split("_")[0]))
+def parse_dataset(levels=["easy"], mode="train", sort_by_hardness=False):
+    all_tasks, all_seqs = [], []
+    for level in levels:
+        data_dir = f"datasets/{data_level2dir[level]}"
+        tasks_dir = f"{data_dir}/{mode}/task"
+        seqs_dir = f"{data_dir}/{mode}/seq"
+        task_fnames = sorted(os.listdir(tasks_dir), key=lambda s: int(s.split("_")[0]))
+        seq_fnames = sorted(os.listdir(seqs_dir), key=lambda s: int(s.split("_")[0]))
 
-    tasks = [json.load(open(f"{tasks_dir}/{fname}")) for fname in task_fnames]
-    seqs = [json.load(open(f"{seqs_dir}/{fname}")) for fname in seq_fnames]
+        tasks = [json.load(open(f"{tasks_dir}/{fname}")) for fname in task_fnames]
+        seqs = [json.load(open(f"{seqs_dir}/{fname}")) for fname in seq_fnames]
+
+        all_tasks.extend(tasks)
+        all_seqs.extend(seqs)
 
     if sort_by_hardness:
-        tasks, seqs = (
-            list(t) for t in zip(*sorted(zip(tasks, seqs), key=compute_hardness))
+        all_tasks, all_seqs = (
+            list(t) for t in zip(*sorted(zip(all_tasks, all_seqs), key=compute_hardness))
         )
     else:
-        tasks, seqs = shuffle(tasks, seqs, random_state=73)
+        all_tasks, all_seqs = shuffle(all_tasks, all_seqs, random_state=73)
 
-    return tasks, seqs
+    return all_tasks, all_seqs
 
 
 def compute_hardness(task_seq):
