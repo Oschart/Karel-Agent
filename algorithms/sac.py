@@ -1,30 +1,37 @@
-from .neural_agent import NeuralAgent
-from common import Action
-from Environment import KarelEnv
-
-import sys
-import torch
-import gym
-import numpy as np
-import torch.nn as nn
-import torch.optim as optim
-import torch.nn.functional as F
-from torch.autograd import Variable
-import matplotlib.pyplot as plt
-import pandas as pd
+import itertools
 import pickle
+import sys
+from copy import deepcopy
+from typing import Union
 
+import gym
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+from common import Action
+from environment import KarelEnv
+from policy_models.mlp import ActorCriticMLP
+from torch.autograd import Variable
+
+from .neural_agent import NeuralAgent
 
 
 class SoftActorCritic(NeuralAgent):
+    name = 'sac'
     def __init__(
         self,
-        policy,
+        policy: Union[ActorCriticMLP, str],
         env,
         GAMMA=0.99,
         learning_rate=0.0003,
         max_eps_len=100,
         max_episodes=100000,
+        variant_name='v0',
+        load_pretrained=False
     ):
         super().__init__(
             policy,
@@ -33,51 +40,89 @@ class SoftActorCritic(NeuralAgent):
             learning_rate=learning_rate,
             max_eps_len=max_eps_len,
             max_episodes=max_episodes,
+            variant_name=variant_name,
+            load_pretrained=load_pretrained
         )
+        self.policy_targ = deepcopy(policy)
+        # Freeze target networks with respect to optimizers (only update via polyak averaging)
+        for p in self.policy_targ.parameters():
+            p.requires_grad = False
 
-    def process_episode(self, state, optimal_seq):
-        self.log_probs = []
-        self.critic_values = []
-        self.rewards = []
-        for t in range(self.max_eps_len):
-            value, policy_dist = self.policy(state)
-            value = value.detach().numpy()[0, 0]
-            dist = policy_dist.detach().numpy()
+        # List of parameters for both Q-networks (save this for convenience)
+        self.q_params = itertools.chain(policy.Q1.parameters(), policy.Q2.parameters())
+        self.pi_optimizer = optim.Adam(policy.PI.parameters(), lr=learning_rate)
+        self.q_optimizer = optim.Adam(self.q_params, lr=learning_rate)
 
-            action = np.random.choice(self.num_actions, p=np.squeeze(dist))
-            optimal_action = Action.from_str[optimal_seq[t]]
-            log_prob = torch.log(policy_dist.squeeze(0)[optimal_action] + 1e-10)
-            entropy = -np.sum(np.mean(dist) * np.log(dist))
-            new_state, reward, done, _ = self.env.step(optimal_action)
+        
 
-            self.rewards.append(reward)
-            self.critic_values.append(value)
-            self.log_probs.append(log_prob)
-            self.entropy_term += entropy
-            state = new_state
 
-            if done:
-                break
-        return t
+    def compute_actor_loss(self, data):
+        s, a, probs = data['S'], data['A'], data["PI"]
+        probs = torch.stack(probs)
+        log_pi = -torch.log(probs + 1e-6)
 
-    def update_policy(self):
-        # compute Q values
-        Qval = 0.0
-        Qvals = np.zeros_like(self.critic_values)
-        for t in reversed(range(len(self.rewards))):
-            Qval = self.rewards[t] + self.GAMMA * Qval
-            Qvals[t] = Qval
+        q1_pi = self.policy.Q1(s,a)
+        q2_pi = self.policy.Q2(s,a)
 
-        # update actor critic
-        critic_values = torch.FloatTensor(self.critic_values)
-        Qvals = torch.FloatTensor(Qvals)
-        log_probs = torch.stack(self.log_probs)
+        q_pi = torch.min(q1_pi, q2_pi)
 
-        advantage = Qvals - critic_values
-        actor_loss = (-log_probs * advantage).mean()
-        critic_loss = 0.5 * advantage.pow(2).mean()
-        ac_loss = actor_loss + critic_loss  # + 0.001 * self.entropy_term
+        alpha = 0.5
+        # Entropy-regularized policy loss
+        loss_pi = (alpha * log_pi - q_pi).mean()
 
-        self.optimizer.zero_grad()
-        ac_loss.backward()
-        self.optimizer.step()
+        return loss_pi
+
+    def compute_critic_loss(self, data):
+        s, a, r, s_next,  d = data['S'], data['A'], data['R'], data['S_next'], data['D']
+
+        q1 = self.policy.Q1(s,a)
+        q2 = self.policy.Q2(s,a)
+
+        alpha = 0.5
+        # Bellman backup for Q functions
+        with torch.no_grad():
+            # Target actions come from *current* policy
+            action_dist = self.policy.PI(s_next)
+
+            dist_stats = action_dist.max(dim=1)
+            a2 = dist_stats.indices
+            a2_prob = dist_stats.values
+            logp_a2 =  torch.log(a2_prob + 1e-13)
+
+            # Target Q-values
+            q1_pi_targ = self.policy_targ.Q1(s_next, a2)
+            q2_pi_targ = self.policy_targ.Q2(s_next, a2)
+            q_pi_targ = torch.min(q1_pi_targ, q2_pi_targ)
+            backup = r + self.GAMMA * (1 - d) * (q_pi_targ - alpha * logp_a2)
+
+        # MSE loss against Bellman backup
+        loss_q1 = ((q1 - backup)**2).mean()
+        loss_q2 = ((q2 - backup)**2).mean()
+        loss_q = loss_q1 + loss_q2
+        
+        return loss_q
+
+    def update_agent(self):
+        critic_loss = self.compute_critic_loss(self.epidata)
+
+        self.q_optimizer.zero_grad()
+        critic_loss.backward()
+        self.q_optimizer.step()
+
+        for p in self.q_params:
+            p.requires_grad = False
+        
+        actor_loss = self.compute_actor_loss(self.epidata)
+        
+        self.pi_optimizer.zero_grad()
+        actor_loss.backward()
+        self.pi_optimizer.step()
+
+        # Finally, update target networks by polyak averaging.
+        polyak=0.995
+        with torch.no_grad():
+            for p, p_targ in zip(self.policy.parameters(), self.policy_targ.parameters()):
+                # NB: We use an in-place operations "mul_", "add_" to update target
+                # params, as opposed to "mul" and "add", which would make new tensors.
+                p_targ.data.mul_(polyak)
+                p_targ.data.add_((1 - polyak) * p.data)

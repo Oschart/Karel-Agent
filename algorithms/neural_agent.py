@@ -40,19 +40,19 @@ class NeuralAgent:
         self.learn_by_demo = learn_by_demo
         self.early_stop = early_stop
         self.variant_name = variant_name
-        
+
         if load_pretrained:
             self.load_policy()
-        
 
     def train(self, tasks, expert_traj=None, data_val=None):
-        self.optimizer = optim.Adam(self.policy.parameters(), lr=self.learning_rate)
 
         all_lengths = []
         average_lengths = []
         all_rewards = []
         self.entropy_term = 0
         best_accr = 0.0
+        best_avg_extra_steps = 1e10
+
         worse_count = 0
 
         for episode in range(self.max_episodes):
@@ -66,20 +66,23 @@ class NeuralAgent:
 
             self.update_agent()
 
-            all_rewards.append(np.sum(self.epidata["R"]))
+            #all_rewards.append(np.sum(self.epidata["R"]))#
             all_lengths.append(t)
             average_lengths.append(np.mean(all_lengths[-10:]))
             if episode % 500 == 0:
                 accr, avg_extra_steps = self.evaluate(data_val[0], data_val[1])
-                if accr > best_accr:
+                if accr > best_accr or (accr == best_accr and avg_extra_steps < best_avg_extra_steps):
                     best_accr = accr
+                    best_avg_extra_steps = avg_extra_steps
                     self.save_policy()
                 else:
                     worse_count += 1
-                
-                print(f"Episode {episode}: validation accuracy={accr*100:.2f}%, \t avg_extra_steps={avg_extra_steps}")
+
+                print(
+                    f"Episode {episode}: validation accuracy={accr*100:.2f}%, \t avg_extra_steps={avg_extra_steps}")
                 if self.early_stop and worse_count >= self.early_stop:
-                    print(f"Early stopping triggered; validation accuracy hasn't increased for {worse_count} epsiodes!")
+                    print(
+                        f"Early stopping triggered; validation accuracy hasn't increased for {worse_count} epsiodes!")
                     break
 
         self.load_policy()
@@ -92,7 +95,6 @@ class NeuralAgent:
     def load_policy(self):
         load_path = f"pretrained/{self.name}_{self.variant_name}.pth"
         self.policy.load_state_dict(torch.load(load_path))
-
 
     def evaluate(self, tasks, opt_seqs, H=100):
         solved = 0
@@ -122,20 +124,28 @@ class NeuralAgent:
         return accr, avg_extra_steps
 
     def reset_rollout_buffer(self):
-        self.epidata = {"S": [], "V": [], "A": [], "R": [], "G": [], "PI": [], "D": []}
+        self.epidata = {"S": [], "V": [], "A": [], "R": [],
+                        "S_next": [], "G": [], "PI": [], "D": []}
 
-    def update_rollout_buffer(self, state, state_value, action, reward, act_prob, done):
+    def update_rollout_buffer(self, state, state_value, action, reward, state_next, act_prob, done):
         self.epidata["S"].append(state)
         self.epidata["V"].append(state_value)
         self.epidata["A"].append(action)
         self.epidata["R"].append(reward)
+        self.epidata["S_next"].append(state_next)
         self.epidata["PI"].append(act_prob)
         self.epidata["D"].append(done)
 
     def wrap_up_episode(self):
-        self.epidata["G"] = self.compute_returns(self.epidata["R"], self.epidata["S"])
-        self.epidata["V"] = torch.FloatTensor(self.epidata["V"])
+        self.epidata["S"] = torch.from_numpy(np.array(self.epidata["S"]))
+        self.epidata["S_next"] = torch.from_numpy(
+            np.array(self.epidata["S_next"]))
 
+        self.epidata["G"] = self.compute_returns(
+            self.epidata["R"], self.epidata["S"])
+        self.epidata["R"] = torch.FloatTensor(self.epidata["R"])
+        self.epidata["V"] = torch.FloatTensor(self.epidata["V"])
+        self.epidata["D"] = torch.IntTensor(self.epidata["D"])
 
     def generate_ep_rollout(self, state, optimal_seq):
         self.reset_rollout_buffer()
@@ -153,7 +163,8 @@ class NeuralAgent:
             act_prob = action_dist.squeeze(0)[action]
             new_state, reward, done, _ = self.env.step(action)
 
-            self.update_rollout_buffer(state, state_value, action, reward, act_prob, done)
+            self.update_rollout_buffer(
+                state, state_value, action, reward, new_state, act_prob, done)
             state = new_state
 
             if done:

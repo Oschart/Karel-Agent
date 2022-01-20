@@ -41,6 +41,8 @@ class ActorCritic(NeuralAgent):
             variant_name=variant_name,
             load_pretrained=load_pretrained
         )
+        self.optimizer = optim.Adam(self.policy.parameters(), lr=self.learning_rate)
+
 
     def compute_actor_loss(self, data):
         probs, G, v = data["PI"], data["G"], data["V"]
@@ -65,7 +67,6 @@ class ActorCritic(NeuralAgent):
     def update_agent(self):
         actor_loss = self.compute_actor_loss(self.epidata)
         critic_loss = self.compute_critic_loss(self.epidata)
-
         ac_loss = actor_loss + critic_loss  # + 0.001 * self.entropy_term
 
         self.optimizer.zero_grad()

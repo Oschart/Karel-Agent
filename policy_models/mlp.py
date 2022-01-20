@@ -21,6 +21,23 @@ def mlp(sizes, activation, output_activation=nn.Identity):
     return nn.Sequential(*layers)
 
 
+class MLP_Actor(nn.Module):
+    def __init__(self, obs_dim, act_dim, hidden_sizes, activation):
+        super().__init__()
+        self.act_dim = act_dim
+        self.pi = mlp(
+            [obs_dim] + list(hidden_sizes) + [act_dim],
+            activation,
+            output_activation=nn.Softmax,
+        )
+    
+    def forward(self, obs, batch_mode=False):
+        obs = torch.from_numpy(np.array(obs)).float()
+        obs = Variable(obs)
+        obs = obs.view(obs.shape[0], -1)
+
+        return self.pi(obs)
+
 class Q_Critic(nn.Module):
     def __init__(self, obs_dim, act_dim, hidden_sizes, activation):
         super().__init__()
@@ -54,15 +71,12 @@ class ActorCriticMLP(nn.Module):
         super().__init__()
 
         # build policy and value functions
-        self.PI = mlp(
-            [obs_dim] + list(hidden_sizes) + [act_dim],
-            activation,
-            output_activation=nn.Softmax,
-        )
+        self.PI = MLP_Actor(obs_dim, act_dim,hidden_sizes, activation)
         
+        self.soft_critic = soft_critic
         if soft_critic:
-            self.V1 = V_Critic(obs_dim, hidden_sizes, activation)
-            self.V2 = V_Critic(obs_dim, hidden_sizes, activation)
+            self.Q1 = Q_Critic(obs_dim, act_dim, hidden_sizes, activation)
+            self.Q2 = Q_Critic(obs_dim, act_dim, hidden_sizes, activation)
         else:
             self.V = V_Critic(obs_dim, hidden_sizes, activation)
 
@@ -73,5 +87,9 @@ class ActorCriticMLP(nn.Module):
             obs = obs.unsqueeze(0)
         obs = Variable(obs)
         obs = obs.view(obs.shape[0], -1)
+
+        if self.soft_critic:
+            return self.PI(obs), 0
+
         return self.PI(obs), self.V(obs)
 
