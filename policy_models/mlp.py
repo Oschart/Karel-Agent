@@ -30,10 +30,17 @@ class MLP_Actor(nn.Module):
             activation,
             output_activation=nn.Softmax,
         )
+
+        self.device = torch.device('cpu')#'cuda:0' if torch.cuda.is_available() else 'cpu')
+        self.to(self.device)
     
     def forward(self, obs, batch_mode=False):
+
         obs = torch.from_numpy(np.array(obs)).float()
-        obs = Variable(obs)
+        if not batch_mode:
+            obs = obs.unsqueeze(0)
+
+        obs = Variable(obs).to(self.device)
         obs = obs.view(obs.shape[0], -1)
 
         return self.pi(obs)
@@ -44,12 +51,16 @@ class Q_Critic(nn.Module):
         self.act_dim = act_dim
         self.q = mlp([obs_dim + act_dim] + list(hidden_sizes) + [1], activation)
 
+        self.device = torch.device('cpu')#'cuda:0' if torch.cuda.is_available() else 'cpu')
+        self.to(self.device)
+
     def forward(self, obs, act):
         obs = Variable(torch.from_numpy(np.array(obs)).float())
         obs = obs.view(obs.shape[0], -1)
         act = Variable(torch.from_numpy(np.array(act)))
         act = F.one_hot(act.to(torch.int64), self.act_dim).float()
-        q = self.q(torch.cat([obs, act], dim=-1))
+        s_a = torch.cat([obs, act], dim=-1).to(self.device)
+        q = self.q(s_a)
         return torch.squeeze(q, -1)
 
 class V_Critic(nn.Module):
@@ -57,8 +68,13 @@ class V_Critic(nn.Module):
         super().__init__()
         self.v = mlp([obs_dim] + list(hidden_sizes) + [1], activation)
 
-    def forward(self, obs):
-        obs = Variable(torch.from_numpy(np.array(obs)).float())
+        self.device = torch.device('cpu')#'cuda:0' if torch.cuda.is_available() else 'cpu')
+        self.to(self.device)
+
+    def forward(self, obs, batch_mode=False):
+        obs = Variable(torch.from_numpy(np.array(obs)).float()).to(self.device)
+        if not batch_mode:
+            obs = obs.unsqueeze(0)
         obs = obs.view(obs.shape[0], -1)
         v = self.v(obs)
         return torch.squeeze(v, -1)
@@ -79,14 +95,19 @@ class ActorCriticMLP(nn.Module):
             self.Q2 = Q_Critic(obs_dim, act_dim, hidden_sizes, activation)
         else:
             self.V = V_Critic(obs_dim, hidden_sizes, activation)
+        
+        self.device = torch.device('cpu')#'cuda:0' if torch.cuda.is_available() else 'cpu')
+        self.to(self.device)
 
 
     def forward(self, obs, batch_mode=False):
+        '''
         obs = torch.from_numpy(np.array(obs)).float()
         if not batch_mode:
             obs = obs.unsqueeze(0)
-        obs = Variable(obs)
+        obs = Variable(obs).to(self.device)
         obs = obs.view(obs.shape[0], -1)
+        '''
 
         if self.soft_critic:
             return self.PI(obs), 0

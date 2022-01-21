@@ -74,6 +74,7 @@ class NeuralAgent:
                 if accr > best_accr or (accr == best_accr and avg_extra_steps < best_avg_extra_steps):
                     best_accr = accr
                     best_avg_extra_steps = avg_extra_steps
+                    worse_count = 0
                     self.save_policy()
                 else:
                     worse_count += 1
@@ -96,7 +97,7 @@ class NeuralAgent:
         load_path = f"pretrained/{self.name}_{self.variant_name}.pth"
         self.policy.load_state_dict(torch.load(load_path))
 
-    def evaluate(self, tasks, opt_seqs, H=100):
+    def evaluate(self, tasks, opt_seqs, H=100, verbose=False):
         solved = 0
         extra_steps = 0
         self.policy.eval()
@@ -120,7 +121,8 @@ class NeuralAgent:
         accr = solved / len(tasks)
         avg_extra_steps = extra_steps / len(tasks)
 
-        #print(f"Attempted {len(tasks)} tasks, correctly solved {solved}. Accuracy={accr*100:.2f}%, avg extra steps={avg_extra_steps:.2f}")
+        if verbose:
+            print(f"Attempted {len(tasks)} tasks, correctly solved {solved}. Accuracy={accr*100:.2f}%, avg extra steps={avg_extra_steps:.2f}")
         return accr, avg_extra_steps
 
     def reset_rollout_buffer(self):
@@ -151,7 +153,7 @@ class NeuralAgent:
         self.reset_rollout_buffer()
         for t in range(self.max_eps_len):
             action_dist, state_value = self.policy(state)
-            dist = action_dist.detach().numpy()
+            dist = action_dist.cpu().detach().numpy()
 
             if self.learn_by_demo:
                 # Use expert optimal action

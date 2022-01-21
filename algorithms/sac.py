@@ -27,9 +27,12 @@ class SoftActorCritic(NeuralAgent):
         policy: Union[ActorCriticMLP, str],
         env,
         GAMMA=0.99,
-        learning_rate=0.0003,
-        max_eps_len=100,
+        learning_rate=3e-4,
         max_episodes=100000,
+        max_eps_len=100,
+        num_actions=6,
+        learn_by_demo=True,
+        early_stop=None,
         variant_name='v0',
         load_pretrained=False
     ):
@@ -38,8 +41,11 @@ class SoftActorCritic(NeuralAgent):
             env,
             GAMMA=GAMMA,
             learning_rate=learning_rate,
-            max_eps_len=max_eps_len,
             max_episodes=max_episodes,
+            max_eps_len=max_eps_len,
+            num_actions=num_actions,
+            learn_by_demo=learn_by_demo,
+            early_stop=early_stop,
             variant_name=variant_name,
             load_pretrained=load_pretrained
         )
@@ -82,7 +88,7 @@ class SoftActorCritic(NeuralAgent):
         # Bellman backup for Q functions
         with torch.no_grad():
             # Target actions come from *current* policy
-            action_dist = self.policy.PI(s_next)
+            action_dist = self.policy.PI(s_next, batch_mode=True)
 
             dist_stats = action_dist.max(dim=1)
             a2 = dist_stats.indices
