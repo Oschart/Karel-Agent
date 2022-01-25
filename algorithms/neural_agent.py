@@ -22,6 +22,7 @@ class NeuralAgent:
         env,
         GAMMA=0.99,
         learning_rate=3e-4,
+        alpha=0.5,
         max_episodes=100000,
         max_eps_len=100,
         num_actions=6,
@@ -34,6 +35,7 @@ class NeuralAgent:
         self.env = env
         self.GAMMA = GAMMA
         self.learning_rate = learning_rate
+        self.alpha=alpha
         self.max_episodes = max_episodes
         self.max_eps_len = max_eps_len
         self.num_actions = num_actions
@@ -99,6 +101,7 @@ class NeuralAgent:
 
     def evaluate(self, tasks, opt_seqs, H=100, verbose=False):
         solved = 0
+        solved_opt = 0
         extra_steps = 0
         self.policy.eval()
         for i in range(len(tasks)):
@@ -116,13 +119,15 @@ class NeuralAgent:
                     break
 
             solved += reward > 0
+            solved_opt += (reward > 0 and t + 1 == len(opt_seq))
             extra_steps += t - len(opt_seq) + 1 if reward > 0 else 0
 
         accr = solved / len(tasks)
+        opt_accr = solved_opt/len(tasks)
         avg_extra_steps = extra_steps / len(tasks)
 
         if verbose:
-            print(f"Attempted {len(tasks)} tasks, correctly solved {solved}. Accuracy={accr*100:.2f}%, avg extra steps={avg_extra_steps:.2f}")
+            print(f"Attempted {len(tasks)} tasks, correctly solved {solved}. Accuracy(solved)={accr*100:.2f}%, Accuracy(optimally solved)={opt_accr*100:.2f}%, avg extra steps={avg_extra_steps:.2f}")
         return accr, avg_extra_steps
 
     def reset_rollout_buffer(self):

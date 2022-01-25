@@ -28,6 +28,7 @@ class SoftActorCritic(NeuralAgent):
         env,
         GAMMA=0.99,
         learning_rate=3e-4,
+        alpha=0.5,
         max_episodes=100000,
         max_eps_len=100,
         num_actions=6,
@@ -41,6 +42,7 @@ class SoftActorCritic(NeuralAgent):
             env,
             GAMMA=GAMMA,
             learning_rate=learning_rate,
+            alpha=0.3,
             max_episodes=max_episodes,
             max_eps_len=max_eps_len,
             num_actions=num_actions,
@@ -72,9 +74,8 @@ class SoftActorCritic(NeuralAgent):
 
         q_pi = torch.min(q1_pi, q2_pi)
 
-        alpha = 0.5
         # Entropy-regularized policy loss
-        loss_pi = (alpha * log_pi - q_pi).mean()
+        loss_pi = (self.alpha * log_pi - q_pi).mean()
 
         return loss_pi
 
