@@ -7,6 +7,8 @@ from sklearn.utils import shuffle
 
 data_level2dir = {"easy": 'data_easy', "medium": 'data_medium', "hard": 'data'}
 
+COMPACT = True
+
 def parse_dataset(levels=["easy"], mode="train", sort_by_hardness=False):
     all_tasks, all_seqs = [], []
     for level in levels:
@@ -42,7 +44,6 @@ def compute_hardness(task_seq):
 
 def vectorize_obs(task):
     n, m = task["gridsz_num_rows"], task["gridsz_num_cols"]
-    feat_v = np.zeros((n, m, 1 + 2 * 5))
 
     ar1 = task["pregrid_agent_row"]
     ac1 = task["pregrid_agent_col"]
@@ -52,19 +53,48 @@ def vectorize_obs(task):
     ac2 = task["postgrid_agent_col"]
     ad2 = Direction.from_str[task["postgrid_agent_dir"]]
 
-    feat_v[ar1, ac1, ad1 + 2] = 1
-    feat_v[ar2, ac2, ad2 + 7] = 1
 
-    # Represent walls
-    for w_pos in task["walls"]:
-        feat_v[w_pos[0], w_pos[1], 0] = 1
+    if COMPACT:
+        feat_v = np.zeros((n, m, 1 + 2 * 2))
+        feat_rot = np.zeros((8))
 
-    # Represent markers
-    for m_pos in task["pregrid_markers"]:
-        feat_v[m_pos[0], m_pos[1], 1] = 1
+        feat_v[ar1, ac1, 2] = 1
+        feat_v[ar2, ac2, 4] = 1
 
-    for m_pos in task["postgrid_markers"]:
-        feat_v[m_pos[0], m_pos[1], 6] = 1
+        # Represent walls
+        for w_pos in task["walls"]:
+            feat_v[w_pos[0], w_pos[1], 0] = 1
+
+        # Represent markers
+        for m_pos in task["pregrid_markers"]:
+            feat_v[m_pos[0], m_pos[1], 1] = 1
+
+        for m_pos in task["postgrid_markers"]:
+            feat_v[m_pos[0], m_pos[1], 3] = 1
+        
+        rot_bits = np.zeros((8))
+        rot_bits[ad1] = 1
+        rot_bits[ad2 + 4] = 1
+
+        feat_v = feat_v.flatten()
+        feat_v = np.concatenate((feat_v, rot_bits))
+
+    else:
+        feat_v = np.zeros((n, m, 1 + 2 * 5))
+
+        feat_v[ar1, ac1, ad1 + 2] = 1
+        feat_v[ar2, ac2, ad2 + 7] = 1
+
+        # Represent walls
+        for w_pos in task["walls"]:
+            feat_v[w_pos[0], w_pos[1], 0] = 1
+
+        # Represent markers
+        for m_pos in task["pregrid_markers"]:
+            feat_v[m_pos[0], m_pos[1], 1] = 1
+
+        for m_pos in task["postgrid_markers"]:
+            feat_v[m_pos[0], m_pos[1], 6] = 1
 
     return feat_v
 
