@@ -27,6 +27,7 @@ class ActorCritic(NeuralAgent):
         GAMMA=0.99,
         learning_rate=3e-4,
         alpha=0.5,
+        clip_range=None,
         max_episodes=100000,
         max_eps_len=100,
         num_actions=6,
@@ -41,6 +42,7 @@ class ActorCritic(NeuralAgent):
             GAMMA=GAMMA,
             learning_rate=learning_rate,
             alpha=alpha,
+            clip_range=clip_range,
             max_episodes=max_episodes,
             max_eps_len=max_eps_len,
             num_actions=num_actions,
@@ -57,9 +59,13 @@ class ActorCritic(NeuralAgent):
         probs = torch.stack(probs)
         log_pi = torch.log(probs + 1e-13)
 
-        # Entropy-regularized policy loss
-        alpha = 0.5
-        loss_pi = alpha * (-log_pi*(G - v)).mean()
+
+        if self.clip_range:
+            c_lo, c_hi = self.clip_range
+            pi_comp = torch.minimum(log_pi, log_pi.clamp(min=c_lo, max=c_hi))
+            loss_pi = self.alpha * (-pi_comp*(G - v)).mean()
+        else:
+            loss_pi = self.alpha * (-log_pi*(G - v)).mean()
 
         return loss_pi
 
@@ -75,7 +81,7 @@ class ActorCritic(NeuralAgent):
     def update_agent(self):
         actor_loss = self.compute_actor_loss(self.epidata)
         critic_loss = self.compute_critic_loss(self.epidata)
-        ac_loss = actor_loss + critic_loss  # + 0.001 * self.entropy_term
+        ac_loss = actor_loss + critic_loss
 
         self.optimizer.zero_grad()
         ac_loss.backward()
