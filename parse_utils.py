@@ -4,12 +4,18 @@ import json
 import numpy as np
 from common import Action, Direction
 from sklearn.utils import shuffle
+import pickle as pkl
 
 data_level2dir = {"easy": 'data_easy', "medium": 'data_medium', "hard": 'data'}
 
 COMPACT = True
 
 def parse_dataset(levels=["easy"], mode="train", sort_by_hardness=False):
+    pickled_path = f'datasets/preprocessed_{mode}_data.pkl'
+    if os.path.isfile(pickled_path):
+        all_tasks, all_seqs = pkl.load(open(pickled_path, 'rb'))
+        return all_tasks, all_seqs
+    
     all_tasks, all_seqs = [], []
     for level in levels:
         data_dir = f"datasets/{data_level2dir[level]}"
@@ -31,6 +37,8 @@ def parse_dataset(levels=["easy"], mode="train", sort_by_hardness=False):
     else:
         all_tasks, all_seqs = shuffle(all_tasks, all_seqs, random_state=73)
 
+    if pickled_path:
+        pkl.dump((all_tasks, all_seqs), open(pickled_path, 'wb'))
     return all_tasks, all_seqs
 
 
