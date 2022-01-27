@@ -23,6 +23,7 @@ class NeuralAgent:
         GAMMA=0.99,
         learning_rate=3e-4,
         alpha=0.5,
+        clip_range=(-1, 1),
         max_episodes=100000,
         max_eps_len=100,
         num_actions=6,
@@ -36,6 +37,7 @@ class NeuralAgent:
         self.GAMMA = GAMMA
         self.learning_rate = learning_rate
         self.alpha=alpha
+        self.clip_range=clip_range
         self.max_episodes = max_episodes
         self.max_eps_len = max_eps_len
         self.num_actions = num_actions
@@ -47,15 +49,18 @@ class NeuralAgent:
             self.load_policy()
 
     def train(self, tasks, expert_traj=None, data_val=None):
-
+        print("=============================================================")
+        print(f"Started training {self.name} (variant: {self.variant_name})")
+        print("=============================================================")
         all_lengths = []
         average_lengths = []
         all_rewards = []
         self.entropy_term = 0
         best_accr = 0.0
         best_avg_extra_steps = 1e10
-
         worse_count = 0
+
+        stats = {'loss': [], 'accr': []}
 
         for episode in range(self.max_episodes):
 
@@ -66,13 +71,16 @@ class NeuralAgent:
             self.policy.train()
             t = self.generate_ep_rollout(task_state, optimal_seq)
 
-            self.update_agent()
+            loss = self.update_agent()
+
+            stats['loss'].append(loss)
 
             #all_rewards.append(np.sum(self.epidata["R"]))#
             all_lengths.append(t)
             average_lengths.append(np.mean(all_lengths[-10:]))
             if episode % 500 == 0:
                 accr, avg_extra_steps = self.evaluate(data_val[0], data_val[1])
+                stats['accr'].append(accr)
                 if accr > best_accr or (accr == best_accr and avg_extra_steps < best_avg_extra_steps):
                     best_accr = accr
                     best_avg_extra_steps = avg_extra_steps
@@ -87,9 +95,12 @@ class NeuralAgent:
                     print(
                         f"Early stopping triggered; validation accuracy hasn't increased for {worse_count} epsiodes!")
                     break
-
+        
+        print("=============================================================")
+        print(f"Finished training {self.name} (variant: {self.variant_name})")
+        print("=============================================================")
         self.load_policy()
-        return self.policy
+        return stats
 
     def save_policy(self):
         save_path = f"pretrained/{self.name}_{self.variant_name}.pth"
@@ -99,7 +110,7 @@ class NeuralAgent:
         load_path = f"pretrained/{self.name}_{self.variant_name}.pth"
         self.policy.load_state_dict(torch.load(load_path))
 
-    def evaluate(self, tasks, opt_seqs, H=100, verbose=False):
+    def evaluate(self, tasks, opt_seqs, H=50, verbose=False):
         solved = 0
         solved_opt = 0
         extra_steps = 0
