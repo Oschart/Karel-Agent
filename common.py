@@ -16,6 +16,8 @@ class Action:
         "finish": finish,
     }
 
+    to_str = {idx:cmd for cmd,idx in from_str.items()}
+
 
 class Direction:
     north = 0

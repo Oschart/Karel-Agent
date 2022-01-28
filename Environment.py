@@ -4,6 +4,8 @@ import gym
 from gym import spaces
 import numpy as np
 from random import choice
+from copy import deepcopy
+ 
 
 from parse_utils import vectorize_obs
 
@@ -14,10 +16,12 @@ class KarelEnv(gym.Env):
     dir_to_dxy = {"north": (-1, 0), "east": (0, 1), "south": (1, 0), "west": (0, -1)}
     dir_ord = ["north", "east", "south", "west"]
 
-    def __init__(self, task_space):
+    def __init__(self, task_space=None, is_compact=True):
         super(KarelEnv, self).__init__()
 
         self.task_space = task_space
+        self.is_compact = is_compact
+        self.probe_mode = False
 
         self.obs_shape = (4, 4, 11)
         self.action_space = spaces.Discrete(self.N_ACTIONS)
@@ -33,14 +37,14 @@ class KarelEnv(gym.Env):
             Action.putMarker: self.putMarker,
             Action.finish: self.finish,
         }
-        self.reset()
+        #self.reset()
 
     def reset(self, init_state=None):
         if init_state is None:
             init_state = choice(self.task_space)
             
         self.init(init_state)
-        return vectorize_obs(init_state)
+        return vectorize_obs(init_state, self.is_compact)
 
     def init(self, task):
         self.task = copy.deepcopy(task)
@@ -65,15 +69,18 @@ class KarelEnv(gym.Env):
             "markers": self.task["postgrid_markers"],
         }
 
-    def get_full_state(self):
-        if self.state == "terminal":
+    def get_full_state(self, state=None):
+        if state is None:
+            state = self.state
+
+        if state == "terminal":
             return "terminal"
 
         task_state = copy.deepcopy(self.task)
-        task_state["pregrid_agent_row"] = self.state["agent_r"]
-        task_state["pregrid_agent_col"] = self.state["agent_c"]
-        task_state["pregrid_agent_dir"] = self.state["agent_d"]
-        task_state["pregrid_markers"] = self.state["markers"]
+        task_state["pregrid_agent_row"] = state["agent_r"]
+        task_state["pregrid_agent_col"] = state["agent_c"]
+        task_state["pregrid_agent_dir"] = state["agent_d"]
+        task_state["pregrid_markers"] = state["markers"]
         return task_state
 
     def generate_rollout(self, PI, H):
@@ -89,12 +96,25 @@ class KarelEnv(gym.Env):
             self.step(a)
 
         return EP
+    
+    def probe(self, action):
+        r = self.R(self.state, action)
+        is_terminal_backup = self.is_terminal
+        self.probe_mode = True
+        next_state = self.action_handlers[action]()
+        is_mock_terminal = self.is_terminal
+        self.probe_mode = False
+        self.is_terminal = is_terminal_backup
+
+        next_obs = vectorize_obs(self.get_full_state(state=self.mock_state), self.is_compact)
+
+        return next_obs, r, is_mock_terminal, {}
 
     def step(self, action):
         r = self.R(self.state, action)
         self.action_handlers[action]()
 
-        next_obs = vectorize_obs(self.get_full_state())
+        next_obs = vectorize_obs(self.get_full_state(), self.is_compact)
 
         return next_obs, r, self.is_terminal, {}
 
@@ -123,7 +143,12 @@ class KarelEnv(gym.Env):
             self.is_terminal = True
             return
 
-        self.state["agent_r"], self.state["agent_c"] = next_pos[0], next_pos[1]
+        if self.probe_mode:
+            self.mock_state = deepcopy(self.state)
+            self.mock_state["agent_r"], self.mock_state["agent_c"] = next_pos[0], next_pos[1]
+        else:
+            self.state["agent_r"], self.state["agent_c"] = next_pos[0], next_pos[1]
+
 
     def turn(self, clk_ort):
         agent_r, agent_c = self.state["agent_r"], self.state["agent_c"]
@@ -133,15 +158,24 @@ class KarelEnv(gym.Env):
         next_idx = (dir_idx + clk_ort + 4) % 4
         new_dir = self.dir_ord[next_idx]
 
-        self.state["agent_d"] = new_dir
+        if self.probe_mode:
+            self.mock_state = deepcopy(self.state)
+            self.mock_state["agent_d"] = new_dir
+        else:
+            self.state["agent_d"] = new_dir
 
     def pickMarker(self):
         agent_r, agent_c = self.state["agent_r"], self.state["agent_c"]
         if (agent_r, agent_c) not in self.state["markers"]:
             self.is_terminal = True
-            return
+            return 
 
-        self.state["markers"].remove((agent_r, agent_c))
+        if self.probe_mode:
+            self.mock_state = deepcopy(self.state)
+            self.mock_state["markers"].remove((agent_r, agent_c))
+        else:
+            self.state["markers"].remove((agent_r, agent_c))
+
 
     def putMarker(self):
         agent_r, agent_c = self.state["agent_r"], self.state["agent_c"]
@@ -149,7 +183,12 @@ class KarelEnv(gym.Env):
             self.is_terminal = True
             return
 
-        self.state["markers"].add((agent_r, agent_c))
+        if self.probe_mode:
+            self.mock_state = deepcopy(self.state)
+            self.mock_state["markers"].add((agent_r, agent_c))
+        else:
+            self.state["markers"].add((agent_r, agent_c))
+
 
     def finish(self):
         self.is_terminal = True
