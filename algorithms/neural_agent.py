@@ -25,25 +25,27 @@ class NeuralAgent:
         alpha=0.5,
         clip_range=(-1, 1),
         max_episodes=100000,
-        max_eps_len=100,
+        max_eps_len=30,
         num_actions=6,
         learn_by_demo=True,
-        early_stop=None,
+        early_stop=30,
         variant_name='v0',
-        load_pretrained=False
+        load_pretrained=False,
+        verbose=False
     ):
         self.policy = policy
         self.env = env
         self.GAMMA = GAMMA
         self.learning_rate = learning_rate
-        self.alpha=alpha
-        self.clip_range=clip_range
+        self.alpha = alpha
+        self.clip_range = clip_range
         self.max_episodes = max_episodes
         self.max_eps_len = max_eps_len
         self.num_actions = num_actions
         self.learn_by_demo = learn_by_demo
         self.early_stop = early_stop
         self.variant_name = variant_name
+        self.verbose = verbose
 
         if load_pretrained:
             self.load_policy()
@@ -65,7 +67,10 @@ class NeuralAgent:
         for episode in range(self.max_episodes):
 
             task_state = tasks[episode % len(tasks)]
-            optimal_seq = expert_traj[episode % len(expert_traj)]["sequence"]
+            if expert_traj:
+                optimal_seq = expert_traj[episode % len(expert_traj)]["sequence"]
+            else:
+                optimal_seq = None
             task_state = self.env.reset(task_state)
 
             self.policy.train()
@@ -89,13 +94,13 @@ class NeuralAgent:
                 else:
                     worse_count += 1
 
-                print(
-                    f"Episode {episode}: validation accuracy={accr*100:.2f}%, \t avg_extra_steps={avg_extra_steps}")
-                if self.early_stop and worse_count >= self.early_stop:
-                    print(
-                        f"Early stopping triggered; validation accuracy hasn't increased for {worse_count} epsiodes!")
-                    break
-        
+                if self.verbose:
+                    print(f"Episode {episode}: validation accuracy={accr*100:.2f}%, \t avg_extra_steps={avg_extra_steps:.2f}")
+                    if self.early_stop and worse_count >= self.early_stop:
+                        print(
+                            f"Early stopping triggered; validation accuracy hasn't increased for {worse_count} epsiodes!")
+                        break
+
         print("=============================================================")
         print(f"Finished training {self.name} (variant: {self.variant_name})")
         print("=============================================================")
@@ -121,9 +126,7 @@ class NeuralAgent:
 
             state = self.env.reset(task_state)
             for t in range(H):
-                action_dist, _ = self.policy(state)
-                dist = action_dist.detach().numpy()
-                action = dist.argmax()
+                action = self.act(state)
 
                 state, reward, done, _ = self.env.step(action)
                 if done:
@@ -162,23 +165,26 @@ class NeuralAgent:
         self.epidata["G"] = self.compute_returns(
             self.epidata["R"], self.epidata["S"])
         self.epidata["R"] = torch.FloatTensor(self.epidata["R"])
-        self.epidata["V"] = torch.FloatTensor(self.epidata["V"])
+
+        if None not in self.epidata["V"]:
+            self.epidata["V"] = torch.cat(self.epidata["V"])
         self.epidata["D"] = torch.IntTensor(self.epidata["D"])
 
-    def generate_ep_rollout(self, state, optimal_seq):
+    def generate_ep_rollout(self, state, optimal_seq=None):
         self.reset_rollout_buffer()
         for t in range(self.max_eps_len):
             action_dist, state_value = self.policy(state)
-            dist = action_dist.cpu().detach().numpy()
+            #dist = action_dist.cpu().detach().numpy()
 
-            if self.learn_by_demo:
+            if self.learn_by_demo and optimal_seq:
                 # Use expert optimal action
                 action = Action.from_str[optimal_seq[t]]
             else:
                 # Use own agent's action
+                dist = action_dist.cpu().detach().numpy()
                 action = np.random.choice(self.num_actions, p=np.squeeze(dist))
 
-            act_prob = action_dist.squeeze(0)[action]
+            act_prob = action_dist[0][action]
             new_state, reward, done, _ = self.env.step(action)
 
             self.update_rollout_buffer(
@@ -199,4 +205,10 @@ class NeuralAgent:
         return torch.FloatTensor(Gs)
 
     def update_agent(self):
+        raise NotImplementedError()
+
+    def act(self, state):
+        raise NotImplementedError()
+
+    def judge(self, state, action=None):
         raise NotImplementedError()

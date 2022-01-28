@@ -101,16 +101,9 @@ class ActorCriticMLP(nn.Module):
 
 
     def forward(self, obs, batch_mode=False):
-        '''
-        obs = torch.from_numpy(np.array(obs)).float()
-        if not batch_mode:
-            obs = obs.unsqueeze(0)
-        obs = Variable(obs).to(self.device)
-        obs = obs.view(obs.shape[0], -1)
-        '''
 
         if self.soft_critic:
-            return self.PI(obs), 0
+            return self.PI(obs), None
 
         return self.PI(obs), self.V(obs)
 

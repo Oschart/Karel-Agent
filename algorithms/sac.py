@@ -34,9 +34,10 @@ class SoftActorCritic(NeuralAgent):
         max_eps_len=100,
         num_actions=6,
         learn_by_demo=True,
-        early_stop=None,
+        early_stop=30,
         variant_name='v0',
-        load_pretrained=False
+        load_pretrained=False,
+        verbose=False
     ):
         super().__init__(
             policy,
@@ -51,7 +52,8 @@ class SoftActorCritic(NeuralAgent):
             learn_by_demo=learn_by_demo,
             early_stop=early_stop,
             variant_name=variant_name,
-            load_pretrained=load_pretrained
+            load_pretrained=load_pretrained,
+            verbose=verbose
         )
         self.policy_targ = deepcopy(policy)
         # Freeze target networks with respect to optimizers (only update via polyak averaging)
@@ -135,3 +137,19 @@ class SoftActorCritic(NeuralAgent):
                 # params, as opposed to "mul" and "add", which would make new tensors.
                 p_targ.data.mul_(polyak)
                 p_targ.data.add_((1 - polyak) * p.data)
+        
+        return actor_loss.item()
+    
+    def act(self, state, return_dist=False):
+        action_dist, _ = self.policy(state)
+        action = action_dist.argmax()
+        if return_dist:
+            return action.item(), action_dist.squeeze()
+        else:
+            return action.item()
+    
+    def judge(self, state, action=None):
+        q1 = self.policy.Q1(state,action)
+        q2 = self.policy.Q2(state,action)
+        q_min = torch.min(q1, q2)
+        return q_min.item()
