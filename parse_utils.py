@@ -10,8 +10,9 @@ data_level2dir = {"easy": 'data_easy', "medium": 'data_medium', "hard": 'data'}
 
 COMPACT = True
 
-def parse_dataset(levels=["easy"], mode="train", sort_by_hardness=False):
-    pickled_path = f'datasets/preprocessed_{mode}_data.pkl'
+def parse_dataset(levels=["easy"], mode="train", sort_by_hardness=False, compact=True):
+    size_mode = 'compact' if compact else 'verbose'
+    pickled_path = f'datasets/preprocessed_{mode}_{"_".join(levels)}_{size_mode}.pkl'
     if os.path.isfile(pickled_path):
         all_tasks, all_seqs = pkl.load(open(pickled_path, 'rb'))
         return all_tasks, all_seqs
@@ -50,7 +51,7 @@ def compute_hardness(task_seq):
     return task_len + 1.5 * putMarkers + 2.0 * pickMarkers
 
 
-def vectorize_obs(task):
+def vectorize_obs(task, is_compact=True):
     n, m = task["gridsz_num_rows"], task["gridsz_num_cols"]
 
     ar1 = task["pregrid_agent_row"]
@@ -62,7 +63,7 @@ def vectorize_obs(task):
     ad2 = Direction.from_str[task["postgrid_agent_dir"]]
 
 
-    if COMPACT:
+    if is_compact:
         feat_v = np.zeros((n, m, 1 + 2 * 2))
         feat_rot = np.zeros((8))
 
