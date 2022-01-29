@@ -31,7 +31,7 @@ class SoftActorCritic(NeuralAgent):
         alpha=0.5,
         clip_range=None,
         max_episodes=100000,
-        max_eps_len=100,
+        max_eps_len=30,
         num_actions=6,
         learn_by_demo=True,
         early_stop=30,
@@ -71,7 +71,11 @@ class SoftActorCritic(NeuralAgent):
     def compute_actor_loss(self, data):
         s, a, probs = data['S'], data['A'], data["PI"]
         probs = torch.stack(probs)
-        log_pi = -torch.log(probs + 1e-6)
+        log_pi = torch.log(probs + 1e-6)
+
+        # In case of BC, minimize entropy
+        if self.learn_by_demo:
+            log_pi = -log_pi
 
         q1_pi = self.policy.Q1(s,a)
         q2_pi = self.policy.Q2(s,a)
