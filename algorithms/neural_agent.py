@@ -115,7 +115,7 @@ class NeuralAgent:
         load_path = f"pretrained/{self.name}_{self.variant_name}.pth"
         self.policy.load_state_dict(torch.load(load_path))
 
-    def evaluate(self, tasks, opt_seqs, H=50, verbose=False):
+    def evaluate(self, tasks, opt_seqs, H=20, verbose=False):
         solved = 0
         solved_opt = 0
         extra_steps = 0
@@ -128,12 +128,12 @@ class NeuralAgent:
             for t in range(H):
                 action = self.act(state)
 
-                state, reward, done, _ = self.env.step(action)
+                state, reward, done, info = self.env.step(action)
                 if done:
                     break
 
-            solved += reward > 0
-            solved_opt += (reward > 0 and t + 1 == len(opt_seq))
+            solved += info['solved']
+            solved_opt += (info['solved'] and t + 1 <= len(opt_seq))
             extra_steps += t - len(opt_seq) + 1 if reward > 0 else 0
 
         accr = solved / len(tasks)
