@@ -1,16 +1,8 @@
 import numpy as np
-import scipy.signal
 from torch.autograd import Variable
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.distributions.normal import Normal
-
-
-def combined_shape(length, shape=None):
-    if shape is None:
-        return (length,)
-    return (length, shape) if np.isscalar(shape) else (length, *shape)
 
 
 def mlp(sizes, activation, output_activation=nn.Identity):
