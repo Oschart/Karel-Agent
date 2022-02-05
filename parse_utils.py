@@ -41,6 +41,26 @@ def parse_dataset(levels=["easy"], mode="train", sort_by_hardness=False, compact
     return all_tasks, all_seqs
 
 
+def parse_test_dataset(levels=["easy"], compact=True):
+    size_mode = 'compact' if compact else 'verbose'
+    mode = 'test_without_seq'
+    pickled_path = f'datasets/preprocessed_{mode}_{"_".join(levels)}_{size_mode}.pkl'
+    if os.path.isfile(pickled_path):
+        all_tasks = pkl.load(open(pickled_path, 'rb'))
+        return all_tasks
+    
+    all_tasks = []
+    for level in levels:
+        data_dir = f"datasets/{data_level2dir[level]}"
+        tasks_dir = f"{data_dir}/{mode}/task"
+        task_fnames = sorted(os.listdir(tasks_dir), key=lambda s: int(s.split("_")[0]))
+        tasks = [json.load(open(f"{tasks_dir}/{fname}")) for fname in task_fnames]
+        all_tasks.extend(tasks)
+
+    if pickled_path:
+        pkl.dump(all_tasks, open(pickled_path, 'wb'))
+    return all_tasks
+
 def compute_hardness(task_seq):
     seq = task_seq[1]["sequence"]
     task_len = len(seq)
