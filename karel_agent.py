@@ -39,7 +39,9 @@ class KarelAgent():
         self.base_agent.policy.eval()
         for i in range(len(tasks)):
             task_state = tasks[i]
-            opt_seq = opt_seqs[i]["sequence"]
+
+            if opt_seqs:
+                opt_seq = opt_seqs[i]["sequence"]
             
             cmd_seq = []
             state = self.env.reset(task_state)
@@ -65,11 +67,17 @@ class KarelAgent():
 
 
             solved += info["solved"]
-            solved_opt += (info["solved"] and t + 1 <= len(opt_seq))
-            extra_steps += t - len(opt_seq) + 1 if info["solved"] else 0
+            if opt_seqs:
+                solved_opt += (info["solved"] and t + 1 <= len(opt_seq))
+                extra_steps += t - len(opt_seq) + 1 if info["solved"] else 0
         
         accr = solved / len(tasks)
-        opt_accr = solved_opt/len(tasks)
-        avg_extra_steps = extra_steps / len(tasks)
 
-        print(f"Attempted {len(tasks)} tasks, correctly solved {solved}. Accuracy(solved)={accr*100:.2f}%, Accuracy(optimally solved)={opt_accr*100:.2f}%, avg extra steps={avg_extra_steps:.2f}")
+        if opt_seqs:
+            opt_accr = solved_opt/len(tasks)
+            avg_extra_steps = extra_steps / len(tasks)
+            opt_stats_str = f", Accuracy(optimally solved)={opt_accr*100:.2f}%, avg extra steps={avg_extra_steps:.2f}"
+        else:
+            opt_stats_str = ""
+
+        print(f"Attempted {len(tasks)} tasks, correctly solved {solved}. Accuracy(solved)={accr*100:.2f}%{opt_stats_str}")

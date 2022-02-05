@@ -8,8 +8,6 @@ import pickle as pkl
 
 data_level2dir = {"easy": 'data_easy', "medium": 'data_medium', "hard": 'data'}
 
-COMPACT = True
-
 def parse_dataset(levels=["easy"], mode="train", sort_by_hardness=False, compact=True):
     size_mode = 'compact' if compact else 'verbose'
     pickled_path = f'datasets/preprocessed_{mode}_{"_".join(levels)}_{size_mode}.pkl'
