@@ -13,6 +13,8 @@ from torch.autograd import Variable
 import matplotlib.pyplot as plt
 import pandas as pd
 import pickle
+from sklearn.utils import shuffle
+
 
 
 class NeuralAgent:
@@ -50,7 +52,7 @@ class NeuralAgent:
         if load_pretrained:
             self.load_policy()
 
-    def train(self, tasks, expert_traj=None, data_val=None):
+    def train(self, tasks, expert_traj=None, data_val=None, reshuffle=False, proliferate=False):
         print("=============================================================")
         print(f"Started training {self.name} (variant: {self.variant_name})")
         print("=============================================================")
@@ -64,7 +66,19 @@ class NeuralAgent:
 
         stats = {'loss': [], 'accr': []}
 
+        if proliferate:
+            self.subtasks = []
+            self.expert_subtraj = []
+
         for episode in range(self.max_episodes):
+
+            if episode > 0 and episode % len(tasks) == 0:
+                if proliferate:
+                    tasks += self.subtasks
+                    expert_traj += self.expert_subtraj
+                if reshuffle:
+                    print('**** Reshuffle Checkpoint ****')
+                    tasks, expert_traj = shuffle(tasks, expert_traj, random_state=episode)
 
             task_state = tasks[episode % len(tasks)]
             if expert_traj:
@@ -74,7 +88,7 @@ class NeuralAgent:
             task_state = self.env.reset(task_state)
 
             self.policy.train()
-            t = self.generate_ep_rollout(task_state, optimal_seq)
+            t = self.generate_ep_rollout(task_state, optimal_seq, proliferate=proliferate)
 
             loss = self.update_agent()
 
@@ -96,6 +110,7 @@ class NeuralAgent:
 
                 if self.verbose:
                     print(f"Episode {episode}: validation accuracy={accr*100:.2f}%, \t avg_extra_steps={avg_extra_steps:.2f}")
+                    print('-'*140)
                     if self.early_stop and worse_count >= self.early_stop:
                         print(
                             f"Early stopping triggered; validation accuracy hasn't increased for {worse_count} epsiodes!")
@@ -105,6 +120,7 @@ class NeuralAgent:
         print(f"Finished training {self.name} (variant: {self.variant_name})")
         print("=============================================================")
         self.load_policy()
+        pickle.dump(stats, open(f'stats/stats_{self.variant_name}.pkl', 'wb'))
         return stats
 
     def save_policy(self):
@@ -115,19 +131,19 @@ class NeuralAgent:
         load_path = f"pretrained/{self.name}_{self.variant_name}.pth"
         self.policy.load_state_dict(torch.load(load_path))
 
-    def evaluate(self, tasks, opt_seqs, H=20, verbose=False):
+    def evaluate(self, tasks, opt_seqs, H=50, verbose=False):
         solved = 0
         solved_opt = 0
         extra_steps = 0
         self.policy.eval()
         for i in range(len(tasks)):
             task_state = tasks[i]
-            opt_seq = opt_seqs[i]["sequence"]
+            if opt_seqs:
+                opt_seq = opt_seqs[i]["sequence"]
 
             state = self.env.reset(task_state)
             for t in range(H):
                 action = self.act(state)
-
                 state, reward, done, info = self.env.step(action)
                 if done:
                     break
@@ -137,11 +153,14 @@ class NeuralAgent:
             extra_steps += t - len(opt_seq) + 1 if reward > 0 else 0
 
         accr = solved / len(tasks)
-        opt_accr = solved_opt/len(tasks)
-        avg_extra_steps = extra_steps / len(tasks)
+        if opt_seqs:
+            opt_accr = solved_opt/len(tasks)
+            avg_extra_steps = extra_steps / len(tasks)
+            opt_stats_str = f", Accuracy(optimally solved)={opt_accr*100:.2f}%, avg extra steps={avg_extra_steps:.2f}"
+        else:
+            opt_stats_str = ""
 
-        if verbose:
-            print(f"Attempted {len(tasks)} tasks, correctly solved {solved}. Accuracy(solved)={accr*100:.2f}%, Accuracy(optimally solved)={opt_accr*100:.2f}%, avg extra steps={avg_extra_steps:.2f}")
+        print(f"Attempted {len(tasks)} tasks, correctly solved {solved}. Accuracy(solved)={accr*100:.2f}%{opt_stats_str}")
         return accr, avg_extra_steps
 
     def reset_rollout_buffer(self):
@@ -170,7 +189,7 @@ class NeuralAgent:
             self.epidata["V"] = torch.cat(self.epidata["V"])
         self.epidata["D"] = torch.IntTensor(self.epidata["D"])
 
-    def generate_ep_rollout(self, state, optimal_seq=None):
+    def generate_ep_rollout(self, state, optimal_seq=None, proliferate=False):
         self.reset_rollout_buffer()
         for t in range(self.max_eps_len):
             action_dist, state_value = self.policy(state)
@@ -193,6 +212,10 @@ class NeuralAgent:
 
             if done:
                 break
+            if t == 0 and proliferate:
+                self.subtasks.append(self.env.get_full_state())
+                self.expert_subtraj.append({"sequence": optimal_seq[t+1:]})
+
         self.wrap_up_episode()
         return t
 
