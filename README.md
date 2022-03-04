@@ -4,7 +4,34 @@ This repo is an implementation for an RL MDP and Agent designed to solve maze-wa
 
 ### Datasets & Pretrained Model
 * Before running the repo code, you need to place the datasets in the prepared `datasets/` folder in their respective subfolders.
-* The best performing model is provided in `pretrained/actor_critic_main_a2c.pth`, and it can be used in the way indicated in the last section.
+* The best performing model is provided in `pretrained/actor_critic_deploy.pth`, and it can be used in the way indicated in the last section.
+
+## Project Structure:
+The project is generally structure as follows:
+* `algorithms`: contains our two gradient policy agents (i.e., A2C and SAC).
+* `policy_models`: contains the PyTorch neural network definitions for agent policy.
+* `pretrained`: contains the saved parameters for our best model.
+* `environment.py`: contains our Karel Gym environment implementation
+* `karel_agent.py`: contains the agent wrapper.
+* `parse_utils.py`: contains utility functions for loading and vectorizing data.
+* `solve_karel.py`: main runner
+
+## How to Run:
+Below are the two general steps to run the Karel solver:
+1. Install all required packages specified in the `requirements.txt` conda environment file. Note that not all of them are strictly necessary, but it's safer to just install them for maximal reproducibility. The most important ones, however, are:
+    * PyTorch 
+    * Gym (for environment)
+    * Numpy
+2. The solver script to run is `solve_karel.py`; it should be executed through the command `python solve_karel.py <ARGS>`. The script requires exactly one of two named arguments. They specify the execution mode for the script and they are:
+    * `--task-path` or just `-t`: Followed by a path to a single Karel task to be solved and printed to the screen. For convenience, you can place the JSON tasks inside the `input_tasks` folder to have a shorter path.
+    * `--dataset-path` or just `-d`: Followed by a directory to several Karel tasks to be solved and written into `./testseqs`.
+3. (optional) In addition to these two arguments, you can further provide the following Boolean arguments to disable the pre-action analytical features:
+    * `--disable-env-probe`: Disables the crash-checks done by the agent via environment probing (enabled by default).
+    * `--disable-cycle-detection`: Disables the cycle detection feature which will make the agent more prone to infinite decision loops before timeout (enabled by default).
+
+**Note**: if you disable both analytical features, the command sequences would be based only on the neural policy (core actor). 
+
+# Experiments:
 
 ### Import essential modules
 

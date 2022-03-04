@@ -132,4 +132,4 @@ dmypy.json
 datasets/
 datasets.zip
 .vscode/launch.json
-pretrained/
+testseqs/*
