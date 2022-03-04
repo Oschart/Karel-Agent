@@ -41,7 +41,16 @@ def parse_dataset(levels=["easy"], mode="train", sort_by_hardness=False, compact
     return all_tasks, all_seqs
 
 
-def parse_test_dataset(levels=["easy"], compact=True):
+def parse_dataset_by_dir(tasks_dir):
+    all_tasks = []
+    task_fnames = sorted(os.listdir(tasks_dir), key=lambda s: int(s.split("_")[0]))
+    task_ids = list(map(lambda s: s.split("_")[0], task_fnames))
+    tasks = [json.load(open(f"{tasks_dir}/{fname}")) for fname in task_fnames]
+    all_tasks.extend(tasks)
+    return all_tasks, task_ids
+
+
+def parse_test_dataset(levels=["hard"], compact=True):
     size_mode = 'compact' if compact else 'verbose'
     mode = 'test_without_seq'
     pickled_path = f'datasets/preprocessed_{mode}_{"_".join(levels)}_{size_mode}.pkl'
